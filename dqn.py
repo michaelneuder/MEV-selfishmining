@@ -17,37 +17,38 @@ class Environment:
         # The agent is able to mine on any of the forks.
         self.num_actions = self.num_players
 
-        # State is a vector of fork lengths and a matrix of blocks owned.
-        self.state_size = self.num_players + self.num_players ** 2 
+        # State is a vector of fork lengths and a vector of blocks owned per 
+        # fork.
+        self.state_size = 2 * self.num_players 
 
     def reset(self):
         # Number of steps in the current episode.
         self.num_steps = 0
-
-        # The length of each miner fork.
-        self.fork_lengths = np.zeros(self.num_players)
 
         # The number of blocks owned by each miner in each fork.
         self.miner_blocks = np.zeros((self.num_players, self.num_players))
 
         # Initialize a random miner to mine the first block. 
         init_miner = np.random.choice(self.num_players)
-        
-        self.fork_lengths[init_miner] = 1
         self.miner_blocks[init_miner, init_miner] = 1
 
-        return self.getState(self.fork_lengths, self.miner_blocks)
+        return self.getState(self.miner_blocks)
 
-    def getState(self, fork_lengths, miner_blocks):
-        return np.concatenate((fork_lengths, miner_blocks.flatten()))
+    '''
+    Returns the state which is a vector of lengths of each fork and a vector 
+    of the number of blocks owned by the 0th agent in each fork. The state is
+    size (2 * self.num_agents).
+    '''
+    def getState(self, miner_blocks):
+        fork_lengths = np.sum(miner_blocks, axis=0)
+        agent_blocks = miner_blocks[0]
+        return np.concatenate((fork_lengths, agent_blocks))
+
 
     '''
     This is the most complex part of the code. In order to figure out what
-    every agents actions are going to be, we need to shuffle the indeces.
-    We have to first swap elements of the fork lengths. For example if the
-    for lengths are [1, 2, 3], and we pass ind=1, we are switching the first
-    two elements, so the output fork lengths are [2, 1, 3].  For the miner
-    blocks, we need to switch rows and switch elements withing those rows.
+    every agents actions are going to be, we need to shuffle the indices.
+    We need to switch rows and switch elements within those rows.
     For example again with ind=1, if the miner blocks are
     [[1,2,3]
     [4,5,6]
@@ -57,23 +58,18 @@ class Environment:
     [2,1,3]
     [7,8,9]]
     '''
-    def permuteState(self, ind):
-        # Swap elements.
-        temp_fork_lengths = copy.deepcopy(self.fork_lengths)
-        temp_fork_lengths[0], temp_fork_lengths[ind] =\
-            temp_fork_lengths[ind], temp_fork_lengths[0]
-
+    def permuteMinerBlocks(self, ind):
         # Swap rows.
         temp_miner_blocks = copy.deepcopy(self.miner_blocks)
         temp_miner_blocks[[0, ind]] = self.miner_blocks[[ind, 0]]
         
         # Swap elements of swapped rows.
-        temp_miner_blocks[0][0], temp_miner_blocks[0][ind] =\
-            temp_miner_blocks[0][ind], temp_miner_blocks[0][0]
-        temp_miner_blocks[ind][0], temp_miner_blocks[ind][ind] =\
-            temp_miner_blocks[ind][ind], temp_miner_blocks[ind][0]
+        temp_miner_blocks[0, 0], temp_miner_blocks[0, ind] =\
+            temp_miner_blocks[0, ind], temp_miner_blocks[0, 0]
+        temp_miner_blocks[ind, 0], temp_miner_blocks[ind, ind] =\
+            temp_miner_blocks[ind, ind], temp_miner_blocks[ind, 0]
 
-        return temp_fork_lengths, temp_miner_blocks
+        return temp_miner_blocks
 
     '''
     Makes a step in the environment based on the current agent network. Returns
@@ -85,28 +81,27 @@ class Environment:
 
         agent_actions = []
         # Loop through each miner to determine what action they will take.
-        for i in range(self.num_players):
-            permute_forks, permute_blocks = self.permuteState(i)
-            action = agent.act(self.getState(permute_forks, permute_blocks))
-            agent_actions.append((i, action))
+        for agent_ind in range(self.num_players):
+            permute_blocks = self.permuteMinerBlocks(agent_ind)
+            action = agent.act(self.getState(permute_blocks))
+            agent_actions.append((agent_ind, action))
         
         # Random miner given the next block. 
         miner_fork = agent_actions[
             np.random.choice(np.arange(len(agent_actions)))]
         
-        # Increment fork length and miner blocks
-        self.fork_lengths[miner_fork[1]] += 1
-        self.miner_blocks[miner_fork[0]][miner_fork[1]] += 1
+        # Increment miner blocks. 
+        self.miner_blocks[miner_fork] += 1
 
-        new_state = self.getState(self.fork_lengths, self.miner_blocks)
+        new_state = self.getState(self.miner_blocks)
 
-        # Terminate when someone reaches five blocks.
+        # Terminate when any fork reaches TERMINATE_BLOCK length.
         done = False
         reward = 0
-        if TERMINATE_BLOCK in self.fork_lengths:
+        if TERMINATE_BLOCK in np.sum(self.miner_blocks, axis=0):
             done = True
             # Agent wins! Earn whale rewards.
-            if self.fork_lengths[0] == TERMINATE_BLOCK:
+            if np.sum(self.miner_blocks[:,0]) == TERMINATE_BLOCK:
                 reward = WHALE_REWARD - self.num_steps + self.miner_blocks[0,0]
             # Agent loses.
             else:
