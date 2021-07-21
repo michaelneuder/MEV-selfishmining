@@ -5,10 +5,11 @@ from keras.models import Sequential
 from keras.layers import Dense
 from keras.optimizers import Adam
 import copy
+import pandas as pd
 
-EPISODES = 1000
-TERMINATE_BLOCK = 5
-WHALE_REWARD = 10
+EPISODES = 100
+TERMINATE_BLOCK = 2
+WHALE_REWARD = 0
 
 class Environment:
     def __init__(self, num_players): 
@@ -29,8 +30,9 @@ class Environment:
         self.miner_blocks = np.zeros((self.num_players, self.num_players))
 
         # Initialize a random miner to mine the first block. 
-        init_miner = np.random.choice(self.num_players)
-        self.miner_blocks[init_miner, init_miner] = 1
+        # init_miner = np.random.choice(self.num_players)
+        # self.miner_blocks[init_miner, init_miner] = 1
+        self.miner_blocks[0, 0] = 1
 
         return self.getState(self.miner_blocks)
 
@@ -42,7 +44,8 @@ class Environment:
     def getState(self, miner_blocks):
         fork_lengths = np.sum(miner_blocks, axis=0)
         agent_blocks = miner_blocks[0]
-        return np.concatenate((fork_lengths, agent_blocks))
+        return np.reshape(np.concatenate((fork_lengths, agent_blocks)),
+                          (1, self.state_size))
 
 
     '''
@@ -105,7 +108,8 @@ class Environment:
                 reward = WHALE_REWARD - self.num_steps + self.miner_blocks[0,0]
             # Agent loses.
             else:
-                win_ind = np.argwhere(self.fork_lengths == TERMINATE_BLOCK)[0,0]
+                win_ind = np.argwhere(
+                    np.sum(self.miner_blocks, axis=0) == TERMINATE_BLOCK)[0,0]
                 reward = - self.num_steps + self.miner_blocks[0, win_ind]
         
         return new_state, reward, done, agent_actions[0][1]        
@@ -114,11 +118,11 @@ class DQNAgent:
     def __init__(self, state_size, action_size):
         self.state_size = state_size
         self.action_size = action_size
-        self.memory = deque(maxlen=2000)
+        self.memory = deque(maxlen=200)
         self.gamma = 0.95    # discount rate
         self.epsilon = 1.0  # exploration rate
         self.epsilon_min = 0.01
-        self.epsilon_decay = 0.995
+        self.epsilon_decay = 0.9
         self.learning_rate = 0.001
         self.model = self._build_model()
 
@@ -144,6 +148,8 @@ class DQNAgent:
     def replay(self, batch_size):
         minibatch = random.sample(self.memory, batch_size)
         for state, action, reward, next_state, done in minibatch:
+            # print("state={}, action={}, reward={}, next_state={}, done={}"
+            #     .format(state, action, reward, next_state, done))
             target = reward
             if not done:
                 target = (reward + self.gamma *
@@ -171,20 +177,23 @@ if __name__ == "__main__":
     agent = DQNAgent(state_size, action_size)
     
     done = False
-    batch_size = 32
+    batch_size = 64
 
-    for e in range(1):
+    rewards = []
+    for e in range(EPISODES):
         state = env.reset()
-        state = np.reshape(state, [1, state_size])
-        for time in range(500):
+        for time in range(1, 500):
             next_state, reward, done, action = env.step(agent)
-            next_state = np.reshape(next_state, [1, state_size])
             agent.memorize(state, action, reward, next_state, done)
             state = next_state
             if done:
                 print("episode: {}/{}, time: {}, score: {}, e: {:.2}"
                       .format(e, EPISODES, time, reward, agent.epsilon))
+                rewards.append(reward)
                 break
             if len(agent.memory) > batch_size:
                 agent.replay(batch_size)
+    
+    np.savetxt("rewards.txt", np.asarray(rewards))
+    agent.save('trained.model')
         
