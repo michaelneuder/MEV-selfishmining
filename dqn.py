@@ -24,7 +24,7 @@ class Environment:
 
     def reset(self):
         # Number of steps in the current episode.
-        self.num_steps = 0
+        self.num_steps = 1
 
         # The number of blocks owned by each miner in each fork.
         self.miner_blocks = np.zeros((self.num_players, self.num_players))
@@ -92,6 +92,8 @@ class Environment:
         # Random miner given the next block. 
         miner_fork = agent_actions[
             np.random.choice(np.arange(len(agent_actions)))]
+
+        print("    mined block={}".format(miner_fork))
         
         # Increment miner blocks. 
         self.miner_blocks[miner_fork] += 1
@@ -106,11 +108,13 @@ class Environment:
             # Agent wins! Earn whale rewards.
             if np.sum(self.miner_blocks[:,0]) == TERMINATE_BLOCK:
                 reward = WHALE_REWARD - self.num_steps + self.miner_blocks[0,0]
+                # print("miner wins, steps={}, blocks={}".format(self.num_steps,self.miner_blocks[0,0]))
             # Agent loses.
             else:
                 win_ind = np.argwhere(
                     np.sum(self.miner_blocks, axis=0) == TERMINATE_BLOCK)[0,0]
                 reward = - self.num_steps + self.miner_blocks[0, win_ind]
+                # print("miner loses, steps={}, blocks={}".format(self.num_steps,self.miner_blocks[0,win_ind]))
         
         return new_state, reward, done, agent_actions[0][1]        
 
@@ -181,18 +185,22 @@ if __name__ == "__main__":
 
     rewards = []
     for e in range(EPISODES):
+        print("episode {}".format(e))
         state = env.reset()
         for time in range(1, 500):
             next_state, reward, done, action = env.step(agent)
             agent.memorize(state, action, reward, next_state, done)
+            print("    state={}, action={}, next_state={}, done={}, rew={}".format(
+                state, action, next_state, done, reward))
             state = next_state
+            if len(agent.memory) > batch_size:
+                agent.replay(batch_size)
             if done:
-                print("episode: {}/{}, time: {}, score: {}, e: {:.2}"
+                print("    episode summary: {}/{}, time: {}, score: {}, e: {:.2}"
                       .format(e, EPISODES, time, reward, agent.epsilon))
                 rewards.append(reward)
                 break
-            if len(agent.memory) > batch_size:
-                agent.replay(batch_size)
+            
     
     np.savetxt("rewards.txt", np.asarray(rewards))
     agent.save('trained.model')
