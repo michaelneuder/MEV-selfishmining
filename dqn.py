@@ -9,7 +9,7 @@ import pandas as pd
 
 EPISODES = 100
 TERMINATE_BLOCK = 2
-WHALE_REWARD = 0
+WHALE_REWARD = 10
 
 class Environment:
     def __init__(self, num_players): 
@@ -30,9 +30,9 @@ class Environment:
         self.miner_blocks = np.zeros((self.num_players, self.num_players))
 
         # Initialize a random miner to mine the first block. 
-        # init_miner = np.random.choice(self.num_players)
-        # self.miner_blocks[init_miner, init_miner] = 1
-        self.miner_blocks[0, 0] = 1
+        init_miner = np.random.choice(self.num_players)
+        self.miner_blocks[init_miner, init_miner] = 1
+        # self.miner_blocks[0, 0] = 1
 
         return self.getState(self.miner_blocks)
 
@@ -75,6 +75,16 @@ class Environment:
         return temp_miner_blocks
 
     '''
+    Permutes the action to be in the perspective of the index of the agent.
+    '''
+    def permuteAction(self, ind, action):
+        if action == 0:
+            return ind
+        elif action == ind:
+            return 0
+        return action
+
+    '''
     Makes a step in the environment based on the current agent network. Returns
     the new state, the reward, if the episode is completed, and the action that
     the 0th agent took.
@@ -86,7 +96,8 @@ class Environment:
         # Loop through each miner to determine what action they will take.
         for agent_ind in range(self.num_players):
             permute_blocks = self.permuteMinerBlocks(agent_ind)
-            action = agent.act(self.getState(permute_blocks))
+            action = self.permuteAction(
+                agent_ind, agent.act(self.getState(permute_blocks)))
             agent_actions.append((agent_ind, action))
         
         # Random miner given the next block. 
