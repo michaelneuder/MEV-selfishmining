@@ -7,8 +7,8 @@ from keras.optimizers import Adam
 import copy
 import pandas as pd
 
-EPISODES = 100
-TERMINATE_BLOCK = 2
+EPISODES = 200
+TERMINATE_BLOCK = 3
 WHALE_REWARD = 10
 
 class Environment:
@@ -32,6 +32,7 @@ class Environment:
         # Initialize a random miner to mine the first block. 
         init_miner = np.random.choice(self.num_players)
         self.miner_blocks[init_miner, init_miner] = 1
+        print("    initial state={}".format(self.getState(self.miner_blocks)))
         # self.miner_blocks[0, 0] = 1
 
         return self.getState(self.miner_blocks)
@@ -104,7 +105,8 @@ class Environment:
         miner_fork = agent_actions[
             np.random.choice(np.arange(len(agent_actions)))]
 
-        print("    mined block={}".format(miner_fork))
+        print("    {} (miner {} mined a block on fork {})".format(
+            miner_fork, miner_fork[0], miner_fork[1]))
         
         # Increment miner blocks. 
         self.miner_blocks[miner_fork] += 1
@@ -214,5 +216,5 @@ if __name__ == "__main__":
             
     
     np.savetxt("rewards.txt", np.asarray(rewards))
-    agent.save('trained.model')
+    agent.save('trained_len3_w10_e200.model')
         
