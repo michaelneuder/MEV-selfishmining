@@ -1,2 +1,0 @@
-model_checkpoint_path: "trained_len3_w10_e200.model"
-all_model_checkpoint_paths: "trained_len3_w10_e200.model"
